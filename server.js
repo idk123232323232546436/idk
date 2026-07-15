@@ -123,6 +123,16 @@ async function initDB() {
   try { await db.execute({ sql: 'ALTER TABLE messages ADD COLUMN is_deleted INTEGER DEFAULT 0', args: [] }); } catch {}
   try { await db.execute({ sql: 'ALTER TABLE users ADD COLUMN password_hash TEXT', args: [] }); } catch {}
   try { await db.execute({ sql: 'ALTER TABLE conversations ADD COLUMN wallpaper_url TEXT', args: [] }); } catch {}
+  try { await db.execute({ sql: 'ALTER TABLE messages ADD COLUMN is_edited INTEGER DEFAULT 0', args: [] }); } catch {}
+  try { await db.execute({ sql: 'ALTER TABLE users ADD COLUMN user_status TEXT DEFAULT NULL', args: [] }); } catch {}
+
+  await db.execute(`CREATE TABLE IF NOT EXISTS blocked_users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    blocker_id INTEGER NOT NULL,
+    blocked_id INTEGER NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(blocker_id, blocked_id)
+  )`);
 }
 
 app.use(cors());
@@ -544,6 +554,76 @@ app.post('/api/messages/:id/forward', auth, async (req, res) => {
   res.json(msg);
 });
 
+// EDIT MESSAGE
+app.put('/api/messages/:id/edit', auth, async (req, res) => {
+  const msgId = parseInt(req.params.id);
+  const { content } = req.body;
+  if (!content) return res.status(400).json({ detail: 'Content required' });
+  const msg = await dbGet('SELECT * FROM messages WHERE id = ?', [msgId]);
+  if (!msg) return res.status(404).json({ detail: 'Message not found' });
+  if (msg.sender_id !== req.userId) return res.status(403).json({ detail: 'Can only edit your own messages' });
+  await db.execute({ sql: 'UPDATE messages SET content = ?, is_edited = 1 WHERE id = ?', args: [content, msgId] });
+  const u = await dbGet('SELECT username, avatar_url FROM users WHERE id = ?', [req.userId]);
+  const members = await dbAll('SELECT user_id FROM conversation_members WHERE conversation_id = ?', [msg.conversation_id]);
+  const outData = { id: msgId, conversation_id: msg.conversation_id, sender_id: req.userId, content, is_edited: 1, sender_username: u.username, sender_avatar: u.avatar_url };
+  const out = JSON.stringify({ type: 'message_edited', data: outData });
+  for (const m of members) {
+    const conn = connections.get(m.user_id);
+    if (conn && conn.readyState === 1) conn.send(out);
+  }
+  res.json(outData);
+});
+
+// SEARCH MESSAGES
+app.get('/api/messages/search', auth, async (req, res) => {
+  const q = req.query.q;
+  if (!q || q.length < 2) return res.status(400).json({ detail: 'Query must be at least 2 characters' });
+  const messages = await dbAll(`
+    SELECT m.*, u.username as sender_username, u.avatar_url as sender_avatar, c.name as conv_name, c.is_group
+    FROM messages m
+    JOIN users u ON m.sender_id = u.id
+    JOIN conversations c ON m.conversation_id = c.id
+    JOIN conversation_members cm ON m.conversation_id = cm.conversation_id
+    WHERE cm.user_id = ? AND m.content LIKE ? AND m.is_deleted = 0
+    ORDER BY m.created_at DESC LIMIT 50
+  `, [req.userId, `%${q}%`]);
+  res.json(messages);
+});
+
+// BLOCK USER
+app.get('/api/users/blocked', auth, async (req, res) => {
+  const blocked = await dbAll(`
+    SELECT u.id, u.username, u.avatar_url FROM blocked_users b
+    JOIN users u ON b.blocked_id = u.id
+    WHERE b.blocker_id = ?
+  `, [req.userId]);
+  res.json(blocked);
+});
+
+app.post('/api/users/block/:id', auth, async (req, res) => {
+  const blockedId = parseInt(req.params.id);
+  if (blockedId === req.userId) return res.status(400).json({ detail: 'Cannot block yourself' });
+  const user = await dbGet('SELECT id FROM users WHERE id = ?', [blockedId]);
+  if (!user) return res.status(404).json({ detail: 'User not found' });
+  try {
+    await dbRun('INSERT INTO blocked_users (blocker_id, blocked_id) VALUES (?, ?)', [req.userId, blockedId]);
+  } catch {}
+  res.json({ message: 'User blocked' });
+});
+
+app.delete('/api/users/block/:id', auth, async (req, res) => {
+  const blockedId = parseInt(req.params.id);
+  await db.execute({ sql: 'DELETE FROM blocked_users WHERE blocker_id = ? AND blocked_id = ?', args: [req.userId, blockedId] });
+  res.json({ message: 'User unblocked' });
+});
+
+// USER STATUS
+app.put('/api/users/me/status', auth, async (req, res) => {
+  const { status } = req.body;
+  await db.execute({ sql: 'UPDATE users SET user_status = ? WHERE id = ?', args: [status || null, req.userId] });
+  res.json({ user_status: status || null });
+});
+
 // UPLOAD
 app.post('/api/upload/avatar', auth, async (req, res) => {
   const { avatar_base64 } = req.body;
@@ -623,6 +703,13 @@ wss.on('connection', (ws, req) => {
           const { type, receiver_id, ...rest } = msg;
           r.send(JSON.stringify({ type: msg.type, data: { ...rest, caller_id: userId } }));
         }
+      } else if (msg.type === 'message_edited') {
+        const members = await dbAll('SELECT user_id FROM conversation_members WHERE conversation_id = ?', [msg.conversation_id]);
+        const out = JSON.stringify({ type: 'message_edited', data: { id: msg.id, conversation_id: msg.conversation_id, content: msg.content } });
+        for (const m of members) {
+          const conn = connections.get(m.user_id);
+          if (conn && conn.readyState === 1) conn.send(out);
+        }
       }
     } catch (e) { console.error('WS error:', e); }
   });
@@ -655,6 +742,7 @@ app.post('/api/reset', async (req, res) => {
   await db.execute({ sql: 'DROP TABLE IF EXISTS conversations', args: [] });
   await db.execute({ sql: 'DROP TABLE IF EXISTS friendships', args: [] });
   await db.execute({ sql: 'DROP TABLE IF EXISTS verification_codes', args: [] });
+  await db.execute({ sql: 'DROP TABLE IF EXISTS blocked_users', args: [] });
   await db.execute({ sql: 'DROP TABLE IF EXISTS users', args: [] });
   await initDB();
   res.json({ message: 'Database reset completely' });
