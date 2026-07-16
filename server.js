@@ -50,18 +50,25 @@ async function refreshUserCache() {
   fs.mkdirSync(path.join(__dirname, dir), { recursive: true });
 });
 
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('db timeout')), ms))
+  ]);
+}
+
 async function dbRun(sql, args = []) {
-  const result = await db.execute({ sql, args });
+  const result = await withTimeout(db.execute({ sql, args }), 10000);
   return Number(result.lastInsertRowid);
 }
 
 async function dbGet(sql, args = []) {
-  const result = await db.execute({ sql, args });
+  const result = await withTimeout(db.execute({ sql, args }), 10000);
   return result.rows[0] || null;
 }
 
 async function dbAll(sql, args = []) {
-  const result = await db.execute({ sql, args });
+  const result = await withTimeout(db.execute({ sql, args }), 10000);
   return result.rows;
 }
 
