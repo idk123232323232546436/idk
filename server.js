@@ -271,8 +271,18 @@ app.put('/api/users/me/password', auth, async (req, res) => {
 });
 
 app.get('/api/users/search', auth, async (req, res) => {
-  const q = req.query.query || '';
-  res.json(await dbAll('SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users WHERE (username LIKE ? OR email LIKE ?) AND id != ?', [`%${q}%`, `%${q}%`, req.userId]));
+  const q = (req.query.query || '').trim().toLowerCase();
+  if (!q) return res.json([]);
+  try {
+    const all = await dbAll(
+      `SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users WHERE id != ?`,
+      [req.userId]
+    );
+    res.json(all.filter(u => u.username.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)));
+  } catch (err) {
+    console.error('Search error:', err);
+    res.json([]);
+  }
 });
 
 // USER PROFILE (must be before /:id route)
