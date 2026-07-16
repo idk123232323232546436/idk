@@ -274,11 +274,8 @@ app.get('/api/search/users', auth, async (req, res) => {
   const q = (req.query.query || '').trim().toLowerCase();
   if (!q) return res.json([]);
   try {
-    const all = await dbAll(
-      `SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users WHERE id != ?`,
-      [req.userId]
-    );
-    res.json(all.filter(u => u.username.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)));
+    const result = await db.execute({ sql: `SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users WHERE id != ? AND (LOWER(username) LIKE '%' || ? || '%' OR LOWER(email) LIKE '%' || ? || '%')`, args: [req.userId, q, q] });
+    res.json(result.rows);
   } catch (err) {
     console.error('Search error:', err);
     res.json([]);
