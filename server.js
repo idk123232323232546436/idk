@@ -31,14 +31,24 @@ const PORT = process.env.PORT || 3000;
 const tursoUrl = process.env.TURSO_DATABASE_URL || 'libsql://mixed-messenger-xexan.aws-eu-west-1.turso.io';
 const tursoToken = process.env.TURSO_AUTH_TOKEN || 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODQwMTE3NzYsImlkIjoiMDE5ZjVmNjEtYjUwMS03MThkLTkwY2MtYzQ0YjI1YzlkNDM1Iiwia2lkIjoiRG5TV0sza3RsNVIzZDNFUW1SblMtdDRjNk4yM0pzd3NtQXVTWmQyY1pkTSIsInJpZCI6ImJiZTkwMTFiLTYwN2EtNGQ4ZS1hMTYxLTBiMmYxZWM2YmJhNyJ9._PUxL8EsMKjw1CoakWlKQlYu38RkXmVNpcobd8YVjdE0mWfvWXGBu4B1qtC65qlSFPP3JQ6Fsc9OvVPJYWfkDg';
 
-const db = createClient({ url: tursoUrl, authToken: tursoToken });
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('db timeout')), ms))
+  ]);
+}
+
+const rawDb = createClient({ url: tursoUrl, authToken: tursoToken });
+const db = {
+  execute: (opts) => withTimeout(rawDb.execute(opts), 15000)
+};
 
 let userCache = [];
 let userCacheTime = 0;
 
 async function refreshUserCache() {
   try {
-    const result = await withTimeout(db.execute({ sql: 'SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users', args: [] }), 8000);
+    const result = await db.execute({ sql: 'SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users', args: [] });
     userCache = result.rows;
     userCacheTime = Date.now();
   } catch (e) {
@@ -49,13 +59,6 @@ async function refreshUserCache() {
 ['uploads/images', 'uploads/videos', 'uploads/voices', 'uploads/files'].forEach(dir => {
   fs.mkdirSync(path.join(__dirname, dir), { recursive: true });
 });
-
-function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error('db timeout')), ms))
-  ]);
-}
 
 async function dbRun(sql, args = []) {
   const result = await withTimeout(db.execute({ sql, args }), 10000);
