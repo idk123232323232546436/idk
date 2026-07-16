@@ -270,7 +270,7 @@ app.put('/api/users/me/password', auth, async (req, res) => {
   res.json({ message: 'Password changed' });
 });
 
-app.get('/api/users/search', auth, async (req, res) => {
+app.get('/api/search/users', auth, async (req, res) => {
   const q = (req.query.query || '').trim().toLowerCase();
   if (!q) return res.json([]);
   try {
