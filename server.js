@@ -793,9 +793,7 @@ app.post('/api/reset', async (req, res) => {
   res.json({ message: 'Database reset completely' });
 });
 
-initDB().then(() => {
-  server.listen(PORT, () => console.log(`Mixed Messenger API running on port ${PORT}`));
-}).catch(err => {
-  console.error('Failed to start:', err);
-  process.exit(1);
+server.listen(PORT, () => {
+  console.log(`Mixed Messenger API running on port ${PORT}`);
+  initDB().then(() => console.log('DB initialized')).catch(err => console.error('DB init error:', err.message));
 });
