@@ -38,7 +38,7 @@ let userCacheTime = 0;
 
 async function refreshUserCache() {
   try {
-    const result = await db.execute({ sql: 'SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users', args: [] });
+    const result = await withTimeout(db.execute({ sql: 'SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users', args: [] }), 8000);
     userCache = result.rows;
     userCacheTime = Date.now();
   } catch (e) {
