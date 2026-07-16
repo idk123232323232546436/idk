@@ -33,6 +33,19 @@ const tursoToken = process.env.TURSO_AUTH_TOKEN || 'eyJhbGciOiJFZERTQSIsInR5cCI6
 
 const db = createClient({ url: tursoUrl, authToken: tursoToken });
 
+let userCache = [];
+let userCacheTime = 0;
+
+async function refreshUserCache() {
+  try {
+    const result = await db.execute({ sql: 'SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users', args: [] });
+    userCache = result.rows;
+    userCacheTime = Date.now();
+  } catch (e) {
+    console.error('User cache refresh failed:', e.message);
+  }
+}
+
 ['uploads/images', 'uploads/videos', 'uploads/voices', 'uploads/files'].forEach(dir => {
   fs.mkdirSync(path.join(__dirname, dir), { recursive: true });
 });
@@ -220,6 +233,7 @@ app.post('/api/auth/register', async (req, res) => {
   const access_token = jwt.sign({ userId: id }, JWT_SECRET, { expiresIn: '7d' });
   const refresh_token = jwt.sign({ userId: id }, JWT_SECRET, { expiresIn: '30d' });
   res.json({ access_token, refresh_token, token_type: 'bearer', user: { id, email, username, avatar_url: null, is_online: 1, last_seen: new Date().toISOString(), created_at: new Date().toISOString() } });
+  refreshUserCache();
 });
 
 app.post('/api/auth/login', async (req, res) => {
@@ -274,11 +288,10 @@ app.get('/api/search/users', auth, async (req, res) => {
   const q = (req.query.query || '').trim().toLowerCase();
   if (!q) return res.json([]);
   try {
-    const allUsers = await Promise.race([
-      db.execute({ sql: 'SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users', args: [] }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
-    ]);
-    const filtered = allUsers.rows.filter(u => u.id !== req.userId && ((u.username || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q)));
+    if (Date.now() - userCacheTime > 30000 || userCache.length === 0) {
+      await refreshUserCache();
+    }
+    const filtered = userCache.filter(u => u.id !== req.userId && ((u.username || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q)));
     res.json(filtered);
   } catch (err) {
     console.error('Search error:', err.message);
