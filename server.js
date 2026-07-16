@@ -76,7 +76,9 @@ async function dbAll(sql, args = []) {
 }
 
 async function initDB() {
-  await db.execute(`CREATE TABLE IF NOT EXISTS users (
+  const rdb = rawDb;
+  try {
+  await rdb.execute(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT UNIQUE NOT NULL,
     username TEXT UNIQUE NOT NULL,
@@ -87,7 +89,7 @@ async function initDB() {
     created_at TEXT DEFAULT (datetime('now'))
   )`);
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS friendships (
+  await rdb.execute(`CREATE TABLE IF NOT EXISTS friendships (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sender_id INTEGER NOT NULL,
     receiver_id INTEGER NOT NULL,
@@ -95,7 +97,7 @@ async function initDB() {
     created_at TEXT DEFAULT (datetime('now'))
   )`);
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS conversations (
+  await rdb.execute(`CREATE TABLE IF NOT EXISTS conversations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT,
     is_group INTEGER DEFAULT 0,
@@ -105,14 +107,14 @@ async function initDB() {
     created_at TEXT DEFAULT (datetime('now'))
   )`);
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS conversation_members (
+  await rdb.execute(`CREATE TABLE IF NOT EXISTS conversation_members (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     conversation_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
     joined_at TEXT DEFAULT (datetime('now'))
   )`);
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS messages (
+  await rdb.execute(`CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     conversation_id INTEGER NOT NULL,
     sender_id INTEGER NOT NULL,
@@ -126,7 +128,7 @@ async function initDB() {
     created_at TEXT DEFAULT (datetime('now'))
   )`);
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS verification_codes (
+  await rdb.execute(`CREATE TABLE IF NOT EXISTS verification_codes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL,
     code TEXT NOT NULL,
@@ -134,7 +136,7 @@ async function initDB() {
     used INTEGER DEFAULT 0
   )`);
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS message_reactions (
+  await rdb.execute(`CREATE TABLE IF NOT EXISTS message_reactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     message_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
@@ -142,23 +144,24 @@ async function initDB() {
     created_at TEXT DEFAULT (datetime('now'))
   )`);
 
-  try { await db.execute({ sql: 'ALTER TABLE messages ADD COLUMN reply_to_id INTEGER', args: [] }); } catch {}
-  try { await db.execute({ sql: 'ALTER TABLE messages ADD COLUMN is_deleted INTEGER DEFAULT 0', args: [] }); } catch {}
-  try { await db.execute({ sql: 'ALTER TABLE users ADD COLUMN password_hash TEXT', args: [] }); } catch {}
-  try { await db.execute({ sql: 'ALTER TABLE conversations ADD COLUMN wallpaper_url TEXT', args: [] }); } catch {}
-  try { await db.execute({ sql: 'ALTER TABLE messages ADD COLUMN is_edited INTEGER DEFAULT 0', args: [] }); } catch {}
-  try { await db.execute({ sql: 'ALTER TABLE users ADD COLUMN user_status TEXT DEFAULT NULL', args: [] }); } catch {}
+  try { await rdb.execute({ sql: 'ALTER TABLE messages ADD COLUMN reply_to_id INTEGER', args: [] }); } catch {}
+  try { await rdb.execute({ sql: 'ALTER TABLE messages ADD COLUMN is_deleted INTEGER DEFAULT 0', args: [] }); } catch {}
+  try { await rdb.execute({ sql: 'ALTER TABLE users ADD COLUMN password_hash TEXT', args: [] }); } catch {}
+  try { await rdb.execute({ sql: 'ALTER TABLE conversations ADD COLUMN wallpaper_url TEXT', args: [] }); } catch {}
+  try { await rdb.execute({ sql: 'ALTER TABLE messages ADD COLUMN is_edited INTEGER DEFAULT 0', args: [] }); } catch {}
+  try { await rdb.execute({ sql: 'ALTER TABLE users ADD COLUMN user_status TEXT DEFAULT NULL', args: [] }); } catch {}
 
-  try { await db.execute('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)', []); } catch {}
-  try { await db.execute('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)', []); } catch {}
+  try { await rdb.execute('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)', []); } catch {}
+  try { await rdb.execute('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)', []); } catch {}
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS blocked_users (
+  await rdb.execute(`CREATE TABLE IF NOT EXISTS blocked_users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     blocker_id INTEGER NOT NULL,
     blocked_id INTEGER NOT NULL,
     created_at TEXT DEFAULT (datetime('now')),
     UNIQUE(blocker_id, blocked_id)
   )`);
+  } catch (e) { console.error('initDB error:', e.message); }
 }
 
 app.use(cors());
@@ -792,4 +795,7 @@ app.post('/api/reset', async (req, res) => {
 
 initDB().then(() => {
   server.listen(PORT, () => console.log(`Mixed Messenger API running on port ${PORT}`));
+}).catch(err => {
+  console.error('Failed to start:', err);
+  process.exit(1);
 });
