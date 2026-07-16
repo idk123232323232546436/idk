@@ -274,11 +274,14 @@ app.get('/api/search/users', auth, async (req, res) => {
   const q = (req.query.query || '').trim().toLowerCase();
   if (!q) return res.json([]);
   try {
-    const result = await db.execute({ sql: `SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users WHERE id != ?`, args: [req.userId] });
-    const filtered = result.rows.filter(u => (u.username || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q));
+    const allUsers = await Promise.race([
+      db.execute({ sql: 'SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users', args: [] }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
+    ]);
+    const filtered = allUsers.rows.filter(u => u.id !== req.userId && ((u.username || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q)));
     res.json(filtered);
   } catch (err) {
-    console.error('Search error:', err);
+    console.error('Search error:', err.message);
     res.json([]);
   }
 });
