@@ -285,14 +285,16 @@ app.put('/api/users/me/password', auth, async (req, res) => {
 });
 
 app.get('/api/search/users', auth, async (req, res) => {
-  const q = (req.query.query || '').trim().toLowerCase();
+  const q = (req.query.query || '').trim();
   if (!q) return res.json([]);
   try {
-    if (Date.now() - userCacheTime > 30000 || userCache.length === 0) {
-      await refreshUserCache();
-    }
-    const filtered = userCache.filter(u => u.id !== req.userId && ((u.username || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q)));
-    res.json(filtered);
+    const exact = await dbGet('SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users WHERE username = ? AND id != ?', [q, req.userId]);
+    if (exact) return res.json([exact]);
+    const partial = await dbGet('SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users WHERE username LIKE ? AND id != ?', [q + '%', req.userId]);
+    if (partial) return res.json([partial]);
+    const emailMatch = await dbGet('SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users WHERE email = ? AND id != ?', [q, req.userId]);
+    if (emailMatch) return res.json([emailMatch]);
+    res.json([]);
   } catch (err) {
     console.error('Search error:', err.message);
     res.json([]);
@@ -760,7 +762,7 @@ async function broadcastOnlineStatus(userId, status) {
 }
 
 // KEEP-ALIVE PING
-app.get('/api/ping', (req, res) => res.json({ status: 'ok', v: 3 }));
+app.get('/api/ping', (req, res) => res.json({ status: 'ok', v: 4 }));
 
 // RESET DATABASE
 app.post('/api/reset', async (req, res) => {
