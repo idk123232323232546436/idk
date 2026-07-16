@@ -126,6 +126,9 @@ async function initDB() {
   try { await db.execute({ sql: 'ALTER TABLE messages ADD COLUMN is_edited INTEGER DEFAULT 0', args: [] }); } catch {}
   try { await db.execute({ sql: 'ALTER TABLE users ADD COLUMN user_status TEXT DEFAULT NULL', args: [] }); } catch {}
 
+  try { await db.execute('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)', []); } catch {}
+  try { await db.execute('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)', []); } catch {}
+
   await db.execute(`CREATE TABLE IF NOT EXISTS blocked_users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     blocker_id INTEGER NOT NULL,
@@ -731,6 +734,9 @@ async function broadcastOnlineStatus(userId, status) {
     }
   }
 }
+
+// KEEP-ALIVE PING
+app.get('/api/ping', (req, res) => res.json({ status: 'ok' }));
 
 // RESET DATABASE
 app.post('/api/reset', async (req, res) => {
