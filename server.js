@@ -743,7 +743,7 @@ async function broadcastOnlineStatus(userId, status) {
 }
 
 // KEEP-ALIVE PING
-app.get('/api/ping', (req, res) => res.json({ status: 'ok', v: 2 }));
+app.get('/api/ping', (req, res) => res.json({ status: 'ok', v: 3 }));
 
 // RESET DATABASE
 app.post('/api/reset', async (req, res) => {
