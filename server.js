@@ -40,7 +40,7 @@ function withTimeout(promise, ms) {
 
 const rawDb = createClient({ url: tursoUrl, authToken: tursoToken });
 const db = {
-  execute: (opts) => withTimeout(rawDb.execute(opts), 15000)
+  execute: (opts) => withTimeout(rawDb.execute(opts), 60000)
 };
 
 let userCache = [];
@@ -48,7 +48,7 @@ let userCacheTime = 0;
 
 async function refreshUserCache() {
   try {
-    const result = await db.execute({ sql: 'SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users', args: [] });
+    const result = await rawDb.execute({ sql: 'SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users', args: [] });
     userCache = result.rows;
     userCacheTime = Date.now();
   } catch (e) {
