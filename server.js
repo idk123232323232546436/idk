@@ -8,6 +8,13 @@ const { createClient } = require('@libsql/client');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection:', err.message || err);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err.message || err);
+});
 const fs = require('fs');
 const nodemailer = require('nodemailer');
 
@@ -61,17 +68,17 @@ async function refreshUserCache() {
 });
 
 async function dbRun(sql, args = []) {
-  const result = await withTimeout(db.execute({ sql, args }), 10000);
+  const result = await db.execute({ sql, args });
   return Number(result.lastInsertRowid);
 }
 
 async function dbGet(sql, args = []) {
-  const result = await withTimeout(db.execute({ sql, args }), 10000);
+  const result = await db.execute({ sql, args });
   return result.rows[0] || null;
 }
 
 async function dbAll(sql, args = []) {
-  const result = await withTimeout(db.execute({ sql, args }), 10000);
+  const result = await db.execute({ sql, args });
   return result.rows;
 }
 
