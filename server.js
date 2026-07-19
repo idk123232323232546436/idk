@@ -310,11 +310,12 @@ app.get('/api/search/users', auth, async (req, res) => {
   try {
     const exact = await dbGet('SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users WHERE username = ? AND id != ?', [q, req.userId]);
     if (exact) return res.json([exact]);
-    const partial = await dbGet('SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users WHERE username LIKE ? AND id != ?', [q + '%', req.userId]);
-    if (partial) return res.json([partial]);
-    const emailMatch = await dbGet('SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users WHERE email = ? AND id != ?', [q, req.userId]);
-    if (emailMatch) return res.json([emailMatch]);
-    res.json([]);
+    const prefix = await dbAll('SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users WHERE username LIKE ? AND id != ? LIMIT 10', [q + '%', req.userId]);
+    if (prefix.length) return res.json(prefix);
+    const contains = await dbAll('SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users WHERE username LIKE ? AND id != ? LIMIT 10', ['%' + q + '%', req.userId]);
+    if (contains.length) return res.json(contains);
+    const emailMatch = await dbAll('SELECT id, email, username, avatar_url, is_online, last_seen, created_at FROM users WHERE email LIKE ? AND id != ? LIMIT 10', ['%' + q + '%', req.userId]);
+    res.json(emailMatch);
   } catch (err) {
     console.error('Search error:', err.message);
     res.json([]);
